@@ -14,8 +14,7 @@
     <p class="sub">
       Pola 10 hari: 2 pagi, libur 2, 2 sore, libur 1, 2 malam, libur 1. Tiap
       hari 1 orang per shift. Malam di tanggal X mulai jam 23:00 tanggal
-      sebelumnya. Pola lanjut terus tiap bulan, izin tersimpan selama halaman
-      terbuka.
+      sebelumnya. Pola lanjut terus tiap bulan, izin tersimpan otomatis.
     </p>
     <div class="bar">
       <div class="nav">
@@ -82,8 +81,17 @@
     </div>
     <div class="wrap"><table id="t"></table></div>
     <p class="hint">
-      Ketuk sel orang yang izin (hari kerja atau libur).
+      Ketuk sel orang yang izin (hari kerja atau libur). Kalau tidak ada
+      pengganti langsung, dicoba tukar berantai di tanggal mana pun. Semua tukar
+      terjadi di bulan yang sama dengan izinnya. Cuma efek sambungan istirahat
+      di pergantian bulan (maksimal 2 hari pertama bulan depan) ikut
+      disesuaikan, dan bulan depan membaca hasil bulan sebelumnya. Tukar balik:
+      yang izin ambil salah satu shift penggantinya di tanggal lain bulan itu
+      (sel bergaris putus = shift yang dilepas). Pengganti otomatis muncul
+      dengan warna terbalik dan nama yang digantiin. Ketuk lagi untuk batalkan
+      izin.
     </p>
+    <div id="stat" class="hint"></div>
     <div id="notes"></div>
     <div id="pop" hidden>
       <div class="pbox" role="dialog" aria-modal="true" aria-labelledby="pt">
@@ -92,6 +100,8 @@
         <button type="button" id="pc">Tutup</button>
       </div>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

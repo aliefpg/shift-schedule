@@ -345,12 +345,22 @@ function render() {
 }
 function toggle(el) {
   if (!el || !el.dataset || el.dataset.i === undefined) return;
-  var i = +el.dataset.i,
-    n = +el.dataset.n;
-  var k = i + "|" + n;
-  if (izin[k]) delete izin[k];
-  else izin[k] = 1;
+  var k = +el.dataset.i + "|" + +el.dataset.n,
+    on = !izin[k];
+  if (on) izin[k] = 1;
+  else delete izin[k];
   render();
+  store
+    .simpan(k, on)
+    .then(function () {
+      status(sb ? "Tersimpan di Supabase" : "Tersimpan di browser");
+    })
+    .catch(function () {
+      if (on) delete izin[k];
+      else izin[k] = 1;
+      render();
+      status("Gagal menyimpan, coba lagi", true);
+    });
 }
 document.getElementById("t").addEventListener("click", function (e) {
   toggle(e.target.closest("td.c"));
@@ -381,8 +391,17 @@ document.getElementById("minrest").addEventListener("input", render);
 document.getElementById("balik").addEventListener("change", render);
 document.getElementById("lalu").addEventListener("change", render);
 document.getElementById("reset").addEventListener("click", function () {
-  izin = {};
-  render();
+  if (!confirm("Hapus semua izin?")) return;
+  store
+    .hapusSemua()
+    .then(function () {
+      izin = {};
+      render();
+      status("Semua izin dihapus");
+    })
+    .catch(function () {
+      status("Gagal menghapus", true);
+    });
 });
 
 var INFO = {
@@ -434,4 +453,122 @@ document.getElementById("pop").addEventListener("click", function (e) {
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") tutupInfo();
 });
+/* ===== Penyimpanan izin =====
+   Kalau config.js diisi (Supabase), data disimpan di database online.
+   Kalau kosong, data disimpan di localStorage browser. */
+var CFG = window.JADWAL_CONFIG || {},
+  sb = null,
+  LS = "jadwal-shift-izin-v1";
+try {
+  if (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase)
+    sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+} catch (e) {
+  sb = null;
+}
+function pad2(n) {
+  return ("0" + n).slice(-2);
+}
+function kunciKeRow(k) {
+  var p = k.split("|"),
+    d = tgl(+p[0]);
+  return {
+    tanggal:
+      d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()),
+    orang: NAMA[+p[1]],
+  };
+}
+function rowKeKunci(r) {
+  var t = r.tanggal.split("-"),
+    n = NAMA.indexOf(r.orang);
+  return n < 0 ? null : idxOf(+t[0], +t[1] - 1, +t[2]) + "|" + n;
+}
+function status(t, bad) {
+  var el = document.getElementById("stat");
+  el.textContent = t;
+  el.style.color = bad ? "var(--It)" : "var(--mut)";
+}
+var store = {
+  muat: function () {
+    if (sb)
+      return sb
+        .from("izin")
+        .select("tanggal,orang")
+        .then(function (r) {
+          if (r.error) throw r.error;
+          var o = {};
+          r.data.forEach(function (x) {
+            var k = rowKeKunci(x);
+            if (k) o[k] = 1;
+          });
+          return o;
+        });
+    try {
+      return Promise.resolve(JSON.parse(localStorage.getItem(LS) || "{}"));
+    } catch (e) {
+      return Promise.resolve({});
+    }
+  },
+  simpan: function (k, on) {
+    if (sb) {
+      var row = kunciKeRow(k);
+      var q = on
+        ? sb
+            .from("izin")
+            .upsert(row, {
+              onConflict: "tanggal,orang",
+              ignoreDuplicates: true,
+            })
+        : sb
+            .from("izin")
+            .delete()
+            .eq("tanggal", row.tanggal)
+            .eq("orang", row.orang);
+      return q.then(function (r) {
+        if (r.error) throw r.error;
+      });
+    }
+    try {
+      localStorage.setItem(LS, JSON.stringify(izin));
+    } catch (e) {}
+    return Promise.resolve();
+  },
+  hapusSemua: function () {
+    if (sb)
+      return sb
+        .from("izin")
+        .delete()
+        .neq("orang", "")
+        .then(function (r) {
+          if (r.error) throw r.error;
+        });
+    try {
+      localStorage.removeItem(LS);
+    } catch (e) {}
+    return Promise.resolve();
+  },
+};
+function muatIzin() {
+  return store
+    .muat()
+    .then(function (o) {
+      izin = o;
+      render();
+      status(sb ? "Terhubung ke Supabase" : "Tersimpan di browser");
+    })
+    .catch(function () {
+      status("Gagal memuat data izin", true);
+    });
+}
+if (sb) {
+  try {
+    sb.channel("izin-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "izin" },
+        muatIzin,
+      )
+      .subscribe();
+  } catch (e) {}
+}
 render();
+muatIzin();
