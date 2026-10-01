@@ -1,0 +1,4 @@
+{
+  "buildCommand": "test -n \"$SUPABASE_URL\" && test -n \"$SUPABASE_ANON_KEY\" && printf \"window.JADWAL_CONFIG = { SUPABASE_URL: '%s', SUPABASE_ANON_KEY: '%s' };\\n\" \"$SUPABASE_URL\" \"$SUPABASE_ANON_KEY\" > public/config.js",
+  "outputDirectory": "public"
+}
