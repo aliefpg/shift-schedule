@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Jadwal Shift</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <h1>Jadwal shift Sep-Okt 2026</h1>
+    <p class="sub">
+      Pola 10 hari: 2 pagi, libur 2, 2 sore, libur 1, 2 malam, libur 1. Tiap
+      hari 1 orang per shift. Malam di tanggal X mulai jam 23:00 tanggal
+      sebelumnya. Pola lanjut terus tiap bulan, izin tersimpan selama halaman
+      terbuka.
+    </p>
+    <div class="bar">
+      <div class="nav">
+        <button id="prev" aria-label="Bulan sebelumnya">&lt;</button
+        ><b id="bln"></b
+        ><button id="next" aria-label="Bulan berikutnya">&gt;</button>
+      </div>
+      <label
+        >Min istirahat (jam)<input
+          type="number"
+          id="minrest"
+          value="12"
+          min="0"
+          max="24"
+      /></label>
+      <div class="chk">
+        <label
+          style="
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            align-self: flex-end;
+            color: var(--fg);
+            font-size: 13px;
+          "
+          ><input type="checkbox" id="balik" checked />Tukar balik</label
+        ><button
+          type="button"
+          class="info"
+          data-k="balik"
+          aria-label="Penjelasan Tukar balik"
+        >
+          ?
+        </button>
+      </div>
+      <div class="chk">
+        <label
+          style="
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            align-self: flex-end;
+            color: var(--fg);
+            font-size: 13px;
+          "
+          ><input type="checkbox" id="lalu" checked />Boleh ubah shift sebelum
+          tanggal izin</label
+        ><button
+          type="button"
+          class="info"
+          data-k="lalu"
+          aria-label="Penjelasan Boleh ubah shift sebelum tanggal izin"
+        >
+          ?
+        </button>
+      </div>
+      <button id="reset">Hapus semua izin</button>
+    </div>
+    <div class="lgt">Legend</div>
+    <div class="legend">
+      <span class="P">Pagi 07-15</span><span class="S">Sore 15-23</span
+      ><span class="M">Malam 23-07 (mulai malam sebelumnya)</span
+      ><span class="L">Libur</span><span class="I">Izin</span>
+    </div>
+    <div class="wrap"><table id="t"></table></div>
+    <p class="hint">
+      Ketuk sel orang yang izin (hari kerja atau libur).
+    </p>
+    <div id="notes"></div>
+    <div id="pop" hidden>
+      <div class="pbox" role="dialog" aria-modal="true" aria-labelledby="pt">
+        <b id="pt"></b>
+        <div id="pp"></div>
+        <button type="button" id="pc">Tutup</button>
+      </div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
