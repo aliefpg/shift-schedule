@@ -31,15 +31,7 @@
           max="24"
       /></label>
       <div class="chk">
-        <label
-          style="
-            flex-direction: row;
-            align-items: center;
-            gap: 6px;
-            align-self: flex-end;
-            color: var(--fg);
-            font-size: 13px;
-          "
+        <label class="inline-label"
           ><input type="checkbox" id="balik" checked />Tukar balik</label
         ><button
           type="button"
@@ -51,15 +43,7 @@
         </button>
       </div>
       <div class="chk">
-        <label
-          style="
-            flex-direction: row;
-            align-items: center;
-            gap: 6px;
-            align-self: flex-end;
-            color: var(--fg);
-            font-size: 13px;
-          "
+        <label class="inline-label"
           ><input type="checkbox" id="lalu" checked />Boleh ubah shift sebelum
           tanggal izin</label
         ><button
@@ -77,31 +61,52 @@
     <div class="legend">
       <span class="P">Pagi 07-15</span><span class="S">Sore 15-23</span
       ><span class="M">Malam 23-07 (mulai malam sebelumnya)</span
-      ><span class="L">Libur</span><span class="I">Izin</span>
+      ><span class="L">Libur</span><span class="I">Izin</span
+      ><span class="tk">Tukar disepakati</span>
     </div>
     <div class="wrap"><table id="t"></table></div>
     <p class="hint">
-      Ketuk sel orang yang izin (hari kerja atau libur). Kalau tidak ada
-      pengganti langsung, dicoba tukar berantai di tanggal mana pun. Semua tukar
-      terjadi di bulan yang sama dengan izinnya. Cuma efek sambungan istirahat
-      di pergantian bulan (maksimal 2 hari pertama bulan depan) ikut
+      Tanggal hari ini dan sebelumnya terkunci otomatis mengikuti tanggal
+      perangkat. Ketuk sel orang yang izin (hari kerja atau libur). Kalau tidak
+      ada pengganti langsung, dicoba tukar berantai di tanggal mana pun. Semua
+      tukar terjadi di bulan yang sama dengan izinnya. Cuma efek sambungan
+      istirahat di pergantian bulan (maksimal 2 hari pertama bulan depan) ikut
       disesuaikan, dan bulan depan membaca hasil bulan sebelumnya. Tukar balik:
       yang izin ambil salah satu shift penggantinya di tanggal lain bulan itu
       (sel bergaris putus = shift yang dilepas). Pengganti otomatis muncul
       dengan warna terbalik dan nama yang digantiin. Ketuk lagi untuk batalkan
       izin.
     </p>
-    <div id="stat" class="hint"></div>
+    <details class="tkr"><summary>Tukar jadwal (sudah disepakati berdua)</summary>
+  <div class="tkrow">
+    <label>Tanggal orang 1<select id="tkTglA"></select></label>
+    <label>Orang 1<select id="tkA"></select></label>
+    <label>Tanggal orang 2<select id="tkTglB"></select></label>
+    <label>Orang 2<select id="tkB"></select></label>
+  </div>
+  <div id="tkPrev" class="hint"></div>
+  <p class="hint">Tanggal kedua orang boleh berbeda, tetapi harus dalam bulan yang sama.</p>
+  <button type="button" id="tkGo">Tukar</button>
+  <div id="stat" class="hint" role="status" aria-live="polite"></div>
+</details>
+    <section class="tkr" aria-labelledby="tkListTitle">
+      <h2 id="tkListTitle">Daftar tukar yang disepakati</h2>
+      <div id="tkList"></div>
+    </section>
     <div id="notes"></div>
     <div id="pop" hidden>
       <div class="pbox" role="dialog" aria-modal="true" aria-labelledby="pt">
         <b id="pt"></b>
         <div id="pp"></div>
+        <div id="pactions" class="pactions" hidden>
+          <button type="button" id="pno">Tidak</button>
+          <button type="button" id="pyes">Ya, tukar</button>
+        </div>
         <button type="button" id="pc">Tutup</button>
       </div>
     </div>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="script.js"></script>
   </body>
 </html>

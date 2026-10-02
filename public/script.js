@@ -3,7 +3,9 @@ var POLA = "MMLLPPLSSL".split(""),
   OFF = [8, 4, 0, 6, 2, 0],
   CAD = 5;
 var NM = { P: "Pagi", S: "Sore", M: "Malam", L: "Libur", I: "Izin" };
-var izin = {};
+var izin = {},
+  tukarList = [],
+  CUT = -1;
 function base(n, i) {
   if (n === CAD) return "L";
   return POLA[(((i + OFF[n]) % 10) + 10) % 10];
@@ -90,6 +92,7 @@ function hitung(days) {
       return (
         (c !== CAD || sh === "S") &&
         a[d][c].c === "L" &&
+        !a[d][c].lock &&
         banned.indexOf(c) < 0 &&
         konflik(a, c, sh, d).length === 0
       );
@@ -118,7 +121,14 @@ function hitung(days) {
       if (cur !== "L") freed.unshift({ d: d, s: cur, by: c });
       if (!freed.length || freed.length > 2) return;
       for (var q = 0; q < freed.length; q++) {
-        if (freed[q].d < LO || freed[q].d > HI2 || freed[q].d >= days) return;
+        if (
+          freed[q].d < LO ||
+          freed[q].d > HI2 ||
+          freed[q].d >= days ||
+          freed[q].d <= CUT
+        )
+          return;
+        if (a[freed[q].d][c].lock) return;
         if (!LALU && mulaiJam(freed[q].s, freed[q].d) < mulaiJam(sh, d)) return;
       }
       var b = klon(a);
@@ -145,7 +155,129 @@ function hitung(days) {
     return best;
   }
   var slots = [],
-    ORD = { M: 0, P: 1, S: 2 };
+    ORD = { M: 0, P: 1, S: 2 },
+    tkr = [];
+  tukarList
+    .slice()
+    .sort(function (a, b) {
+      return (
+        (a.iA === undefined ? a.i : a.iA) - (b.iA === undefined ? b.i : b.iA)
+      );
+    })
+    .forEach(function (t) {
+      var da = t.iA === undefined ? t.i : t.iA,
+        db = t.iB === undefined ? da : t.iB;
+      if (da < 0 || da >= days || db < 0 || db >= days) return;
+      var ia = NAMA.indexOf(t.a),
+        ib = NAMA.indexOf(t.b);
+      if (ia < 0 || ib < 0 || ia === ib || ia === CAD || ib === CAD) return;
+      var sa = st[da][ia].c,
+        sb = st[db][ib].c;
+      if (sa === sb && da === db) return;
+      if (da === db) {
+        if (st[da][ia].lock || st[db][ib].lock) return;
+        st[da][ia] = {
+          c: sb,
+          orig: sb,
+          tukar: true,
+          lock: true,
+          pair: NAMA[ib],
+        };
+        st[db][ib] = {
+          c: sa,
+          orig: sa,
+          tukar: true,
+          lock: true,
+          pair: NAMA[ia],
+        };
+        tkr.push({ d: da, p: ia, swap: t }, { d: db, p: ib, swap: t });
+      } else {
+        if (
+          st[da][ia].lock ||
+          st[da][ib].lock ||
+          st[db][ia].lock ||
+          st[db][ib].lock ||
+          sa === "L" ||
+          sa === "I" ||
+          sb === "L" ||
+          sb === "I" ||
+          st[da][ib].c === "I" ||
+          st[db][ia].c === "I"
+        )
+          return;
+        var shiftLamaB = st[da][ib].c,
+          shiftLamaA = st[db][ia].c;
+        st[da][ia] = {
+          c: "L",
+          orig: "L",
+          tukar: true,
+          lock: true,
+          pair: NAMA[ib],
+        };
+        st[da][ib] = {
+          c: sa,
+          orig: sa,
+          tukar: true,
+          lock: true,
+          pair: NAMA[ia],
+        };
+        st[db][ib] = {
+          c: "L",
+          orig: "L",
+          tukar: true,
+          lock: true,
+          pair: NAMA[ia],
+        };
+        st[db][ia] = {
+          c: sb,
+          orig: sb,
+          tukar: true,
+          lock: true,
+          pair: NAMA[ib],
+        };
+        tkr.push({ d: da, p: ib, swap: t }, { d: db, p: ia, swap: t });
+        if (shiftLamaB !== "L" && shiftLamaB !== sa)
+          notes.push({
+            i: da,
+            warn: true,
+            t:
+              "Peringatan: shift " +
+              NM[shiftLamaB] +
+              " milik " +
+              NAMA[ib] +
+              " diganti dan menjadi kosong.",
+          });
+        if (shiftLamaA !== "L" && shiftLamaA !== sb)
+          notes.push({
+            i: db,
+            warn: true,
+            t:
+              "Peringatan: shift " +
+              NM[shiftLamaA] +
+              " milik " +
+              NAMA[ia] +
+              " diganti dan menjadi kosong.",
+          });
+      }
+      notes.push({
+        i: da,
+        tk: true,
+        t:
+          "Tukar disepakati: " +
+          NAMA[ia] +
+          " " +
+          NM[sa] +
+          " (" +
+          fmt(tgl(da)) +
+          ") ↔ " +
+          NAMA[ib] +
+          " " +
+          NM[sb] +
+          " (" +
+          fmt(tgl(db)) +
+          ")",
+      });
+    });
   for (i = 0; i < days; i++)
     for (n = 0; n < NAMA.length; n++) {
       if (izin[i + "|" + n]) {
@@ -154,6 +286,55 @@ function hitung(days) {
         st[i][n] = { c: "I", orig: st[i][n].orig };
       }
     }
+  var restWarnings = [];
+  tkr.forEach(function (entry) {
+    var shift = st[entry.d][entry.p].c;
+    if (shift === "L" || shift === "I") return;
+    konflik(st, entry.p, shift, entry.d).forEach(function (conflict) {
+      var gap =
+        conflict.e < entry.d
+          ? mulaiJam(shift, entry.d) - akhirJam(conflict.s, conflict.e)
+          : mulaiJam(conflict.s, conflict.e) - akhirJam(shift, entry.d);
+      if (gap >= MR) return;
+      var warning = restWarnings.find(function (item) {
+        return item.swap === entry.swap;
+      });
+      if (!warning) {
+        warning = {
+          swap: entry.swap,
+          day: entry.d,
+          gap: gap,
+          people: [],
+        };
+        restWarnings.push(warning);
+      }
+      if (gap < warning.gap) {
+        warning.gap = gap;
+        warning.people = [entry.p];
+      } else if (
+        gap === warning.gap &&
+        warning.people.indexOf(entry.p) < 0
+      ) {
+        warning.people.push(entry.p);
+      }
+    });
+  });
+  restWarnings.forEach(function (warning) {
+    notes.push({
+      i: warning.day,
+      warn: true,
+      t:
+        "Peringatan: " +
+        warning.people
+          .map(function (person) {
+            return NAMA[person];
+          })
+          .join(" dan ") +
+        " istirahatnya hanya " +
+        Math.max(0, warning.gap) +
+        " jam.",
+    });
+  });
   slots.sort(function (a, b) {
     return a.d - b.d || ORD[a.sh] - ORD[b.sh];
   });
@@ -162,12 +343,15 @@ function hitung(days) {
     LO = Math.max(0, idxOf(dt.getFullYear(), dt.getMonth(), 1));
     HI = idxOf(dt.getFullYear(), dt.getMonth() + 1, 0);
     HI2 = idxOf(dt.getFullYear(), dt.getMonth() + 2, 0);
+    var LALU0 = LALU;
+    if (x.rep) LALU = false;
     var r = isi(st, x.d, x.sh, x.n, 0, [x.n, CAD]);
     var pakaiCad = false;
     if (!r) {
       r = isi(st, x.d, x.sh, x.n, 0, [x.n]);
       pakaiCad = !!r;
     }
+    LALU = LALU0;
     if (r) {
       st = r.st;
       r.parts.forEach(function (q) {
@@ -188,11 +372,12 @@ function hitung(days) {
         })
         .join("; ");
       var multi = r.parts.length > 1 || pakaiCad;
-      if (document.getElementById("balik").checked) {
+      if (x.rep) txt = "Sesuaikan setelah tukar: " + txt;
+      if (!x.rep && document.getElementById("balik").checked) {
         var p0 = r.parts[0].p,
           bE = -1,
           bD = 1e9;
-        for (var e = x.d + 1; e <= HI && e < days; e++) {
+        for (var e = Math.max(x.d, CUT) + 1; e <= HI && e < days; e++) {
           var cell = st[e][p0];
           if (cell.c === "L" || cell.c === "I" || cell.sub || cell.freed)
             continue;
@@ -228,12 +413,17 @@ function hitung(days) {
       notes.push({
         i: x.d,
         bad: 1,
-        t:
-          "Shift " +
-          NM[x.sh] +
-          " kosong, " +
-          NAMA[x.n] +
-          " izin. Tidak ada pengganti, termasuk tukar berantai dan cadangan.",
+        t: x.rep
+          ? "Shift " +
+            NM[x.sh] +
+            " " +
+            NAMA[x.n] +
+            " kosong setelah tukar (bentrok istirahat). Tidak ada pengganti."
+          : "Shift " +
+            NM[x.sh] +
+            " kosong, " +
+            NAMA[x.n] +
+            " izin. Tidak ada pengganti, termasuk tukar berantai dan cadangan.",
       });
     }
   });
@@ -270,7 +460,9 @@ function fmt(d) {
 }
 function render() {
   var i0 = Math.max(0, idxOf(vy, vm, 1)),
-    i1 = idxOf(vy, vm + 1, 0);
+    i1 = idxOf(vy, vm + 1, 0),
+    now = new Date();
+  CUT = idxOf(now.getFullYear(), now.getMonth(), now.getDate());
   var h = hitung(i1 + 32),
     t = document.getElementById("t");
   document.getElementById("bln").textContent = BLN[vm] + " " + vy;
@@ -285,10 +477,12 @@ function render() {
   h.res.forEach(function (row, i) {
     if (i < i0 || i > i1) return;
     var d = tgl(i),
-      wk = d.getDay() === 0 || d.getDay() === 6;
+      wk = d.getDay() === 0 || d.getDay() === 6,
+      lw = i <= CUT;
     html +=
       "<tr><td class='d" +
       (wk ? " wk" : "") +
+      (lw ? " lewat" : "") +
       "'>" +
       HR[d.getDay()] +
       " " +
@@ -302,12 +496,14 @@ function render() {
         (c.sub ? " sub" : "") +
         (c.warn ? " warn" : "") +
         (c.freed ? " freed" : "") +
+        (c.tukar ? " tukar" : "") +
+        (lw ? " lewat" : "") +
         "' data-i='" +
         i +
         "' data-n='" +
         n +
         "'" +
-        (can ? " tabindex='0' role='button'" : "") +
+        (can && !lw ? " tabindex='0' role='button'" : "") +
         ">" +
         NM[c.c] +
         (c.sub
@@ -317,6 +513,7 @@ function render() {
             "</small>"
           : "") +
         (c.freed ? "<small>digantikan</small>" : "") +
+        (c.tukar ? "<small>↔" + c.pair + "</small>" : "") +
         (c.kosong ? "<small>KOSONG</small>" : "") +
         "</td>";
     });
@@ -331,7 +528,13 @@ function render() {
         .map(function (x) {
           return (
             "<div" +
-            (x.bad ? " class='bad'" : x.warn ? " class='wr'" : "") +
+            (x.bad
+              ? " class='bad'"
+              : x.tk
+                ? " class='tk'"
+                : x.warn
+                  ? " class='wr'"
+                  : "") +
             "><b>" +
             fmt(tgl(x.i)) +
             "</b> " +
@@ -340,11 +543,19 @@ function render() {
           );
         })
         .join("")
-    : "<div>Belum ada izin bulan ini. Ketuk shift untuk menandai izin.</div>";
+    : "<div>Belum ada izin atau tukar bulan ini. Ketuk sel untuk menandai izin.</div>";
   document.getElementById("notes").innerHTML = "<b>Pergantian</b>" + nh;
+  isiPilihanTukar(i0, i1);
 }
 function toggle(el) {
   if (!el || !el.dataset || el.dataset.i === undefined) return;
+  if (+el.dataset.i <= CUT) {
+    status(
+      "Tanggal " + fmt(tgl(+el.dataset.i)) + " sudah lewat, tidak bisa diubah",
+      true,
+    );
+    return;
+  }
   var k = +el.dataset.i + "|" + +el.dataset.n,
     on = !izin[k];
   if (on) izin[k] = 1;
@@ -396,8 +607,9 @@ document.getElementById("reset").addEventListener("click", function () {
     .hapusSemua()
     .then(function () {
       izin = {};
+      tukarList = [];
       render();
-      status("Semua izin dihapus");
+      status("Semua izin dan tukar dihapus");
     })
     .catch(function () {
       status("Gagal menghapus", true);
@@ -426,6 +638,16 @@ var INFO = {
     ],
   },
 };
+var aksiKonfirmasiTukar = null;
+function bukaKonfirmasiTukar(pesan, lanjutkan) {
+  document.getElementById("pt").textContent = "Konfirmasi tukar";
+  document.getElementById("pp").textContent = pesan + " Tetap lanjutkan tukar?";
+  document.getElementById("pc").hidden = true;
+  document.getElementById("pactions").hidden = false;
+  document.getElementById("pop").hidden = false;
+  aksiKonfirmasiTukar = lanjutkan;
+  document.getElementById("pno").focus();
+}
 function bukaInfo(k) {
   var x = INFO[k];
   document.getElementById("pt").textContent = x.t;
@@ -434,12 +656,17 @@ function bukaInfo(k) {
       return "<p>" + t + "</p>";
     })
     .join("");
+  document.getElementById("pc").hidden = false;
+  document.getElementById("pactions").hidden = true;
   document.getElementById("pop").firstChild.scrollTop = 0;
   document.getElementById("pop").hidden = false;
   document.getElementById("pc").focus();
 }
 function tutupInfo() {
   document.getElementById("pop").hidden = true;
+  document.getElementById("pc").hidden = false;
+  document.getElementById("pactions").hidden = true;
+  aksiKonfirmasiTukar = null;
 }
 Array.prototype.forEach.call(document.querySelectorAll(".info"), function (b) {
   b.addEventListener("click", function () {
@@ -447,18 +674,185 @@ Array.prototype.forEach.call(document.querySelectorAll(".info"), function (b) {
   });
 });
 document.getElementById("pc").addEventListener("click", tutupInfo);
+document.getElementById("pno").addEventListener("click", tutupInfo);
+document.getElementById("pyes").addEventListener("click", function () {
+  var lanjutkan = aksiKonfirmasiTukar;
+  tutupInfo();
+  if (lanjutkan) lanjutkan();
+});
 document.getElementById("pop").addEventListener("click", function (e) {
   if (e.target === this) tutupInfo();
 });
 document.addEventListener("keydown", function (e) {
   if (e.key === "Escape") tutupInfo();
 });
+/* ===== Tukar jadwal yang sudah disepakati ===== */
+/* ===== Tukar jadwal yang sudah disepakati ===== */
+function $(id){return document.getElementById(id);}
+function isiPilihanTukar(i0,i1){
+  var h="",i;
+  for(i=Math.max(i0,CUT+1);i<=i1;i++){var d=tgl(i);h+="<option value='"+i+"'>"+HR[d.getDay()]+" "+fmt(d)+"</option>";}
+  ["tkTglA","tkTglB"].forEach(function(id){
+    var sel=$(id),cur=sel.value;
+    sel.innerHTML=h;
+    if(cur&&sel.querySelector("option[value='"+cur+"']"))sel.value=cur;
+  });
+  ["tkA","tkB"].forEach(function(id,k){
+    var s=$(id),c=s.value;
+    if(!s.options.length){s.innerHTML=NAMA.slice(0,CAD).map(function(n,j){return "<option value='"+j+"'>"+n+"</option>";}).join("");s.value=k;}
+    else if(c)s.value=c;
+  });
+  previewTukar();
+  $("tkList").innerHTML=tukarList.filter(function(t){var da=t.iA===undefined?t.i:t.iA;return da>=i0&&da<=i1;}).map(function(t){
+    var ia=NAMA.indexOf(t.a),ib=NAMA.indexOf(t.b),da=t.iA===undefined?t.i:t.iA,db=t.iB===undefined?da:t.iB;
+    return "<div class='tkit'><span>"+t.a+" "+NM[t.sa||base(ia,da)]+" ("+fmt(tgl(da))+") ↔ "+t.b+" "+NM[t.sb||base(ib,db)]+" ("+fmt(tgl(db))+")</span><button type='button' class='tkdel' data-ia='"+da+"' data-ib='"+db+"' data-a='"+t.a+"' data-b='"+t.b+"' aria-label='Batalkan tukar'>✕</button></div>";
+  }).join("");
+}
+function pesanIstirahatTerpendek(view, perubahan, orangList, awal, akhir) {
+  var jeda = [];
+  orangList.forEach(function (orang) {
+    var shifts = [];
+    for (var d = Math.max(0, awal - 3); d <= akhir + 3; d++) {
+      var key = d + "|" + orang;
+      var sh = Object.prototype.hasOwnProperty.call(perubahan, key)
+        ? perubahan[key]
+        : view[d] && view[d][orang]
+          ? view[d][orang].c
+          : base(orang, d);
+      if (sh !== "L" && sh !== "I") shifts.push({ d: d, s: sh });
+    }
+    shifts.sort(function (x, y) {
+      return mulaiJam(x.s, x.d) - mulaiJam(y.s, y.d);
+    });
+    for (var j = 1; j < shifts.length; j++) {
+      var prev = shifts[j - 1],
+        next = shifts[j];
+      jeda.push({
+        orang: orang,
+        jam: mulaiJam(next.s, next.d) - akhirJam(prev.s, prev.d),
+      });
+    }
+  });
+  if (!jeda.length) return "";
+  var jamMin = Math.min.apply(
+    null,
+    jeda.map(function (x) {
+      return x.jam;
+    }),
+  );
+  if (jamMin >= minRest()) return "";
+  var orangTerpendek = [];
+  jeda.forEach(function (x) {
+    if (x.jam === jamMin && orangTerpendek.indexOf(x.orang) < 0)
+      orangTerpendek.push(x.orang);
+  });
+  return (
+    "Peringatan: " +
+    orangTerpendek
+      .map(function (orang) {
+        return NAMA[orang];
+      })
+      .join(" dan ") +
+    " istirahatnya hanya " +
+    Math.max(0, jamMin) +
+    " jam."
+  );
+}
+function previewTukar(){
+  var da=+$("tkTglA").value,db=+$("tkTglB").value,a=+$("tkA").value,b=+$("tkB").value,el=$("tkPrev");
+  if(!$("tkTglA").value||!$("tkTglB").value){el.textContent="Semua tanggal bulan ini sudah lewat, tidak bisa ditukar.";return false;}
+  if(a===b){el.textContent="Pilih dua orang yang berbeda.";return false;}
+  var view=hitung(idxOf(vy,vm+1,0)+32).res,ca=view[da][a],cb=view[db][b],sa=ca.c,sb=cb.c;
+  if(ca.lock||cb.lock){el.textContent="Salah satu shift itu sudah termasuk tukar lain.";return false;}
+  if(da===db&&sa===sb){el.textContent="Shift mereka sama ("+NM[sa]+"), tidak ada yang ditukar.";return false;}
+  if(da!==db){
+    var bAtA=view[da][b],aAtB=view[db][a];
+    if(sa==="L"||sa==="I"||sb==="L"||sb==="I"){
+      el.textContent="Untuk tukar beda tanggal, kedua sel yang ditukar harus berisi shift kerja.";return false;
+    }
+    if(bAtA.c==="I"||aAtB.c==="I"||bAtA.lock||aAtB.lock||bAtA.sub||aAtB.sub||bAtA.freed||aAtB.freed){
+      el.textContent="Salah satu shift penerima sedang izin atau sudah termasuk tukar lain.";return false;
+    }
+    var shiftKosong=[];
+    if(bAtA.c!=="L"&&bAtA.c!==sa)shiftKosong.push(NM[bAtA.c]+" milik "+NAMA[b]+" "+fmt(tgl(da))+" akan menjadi kosong");
+    if(aAtB.c!=="L"&&aAtB.c!==sb)shiftKosong.push(NM[aAtB.c]+" milik "+NAMA[a]+" "+fmt(tgl(db))+" akan menjadi kosong");
+    var perubahan = {};
+    perubahan[da + "|" + a] = "L";
+    perubahan[da + "|" + b] = sa;
+    perubahan[db + "|" + b] = "L";
+    perubahan[db + "|" + a] = sb;
+    var peringatan = pesanIstirahatTerpendek(
+      view,
+      perubahan,
+      [a, b],
+      Math.min(da, db),
+      Math.max(da, db),
+    );
+    el.textContent=NAMA[a]+" "+NM[sa]+" "+fmt(tgl(da))+" → libur; "+NAMA[b]+" mengisi "+NM[sa]+". Lalu "+NAMA[b]+" "+NM[sb]+" "+fmt(tgl(db))+" → libur; "+NAMA[a]+" mengisi "+NM[sb]+"."+(shiftKosong.length ? " Dampak: "+shiftKosong.join("; ")+"." : "")+(peringatan ? " "+peringatan : " Istirahat memenuhi batas minimum.");
+    return true;
+  }
+  var perubahan = {};
+  perubahan[da + "|" + a] = sb;
+  perubahan[da + "|" + b] = sa;
+  var peringatan = pesanIstirahatTerpendek(view, perubahan, [a, b], da, da);
+  el.textContent =
+    NAMA[a] +
+    ": " +
+    NM[sa] +
+    " → " +
+    NM[sb] +
+    "   |   " +
+    NAMA[b] +
+    ": " +
+    NM[sb] +
+    " → " +
+    NM[sa] +
+    (peringatan
+      ? ". " + peringatan
+      : ". Istirahat memenuhi batas minimum.");
+  return true;
+}
+["tkTglA","tkTglB","tkA","tkB"].forEach(function(id){$(id).addEventListener("change",previewTukar);});
+function simpanTukarTerpilih(){
+  status("Memproses tukar...");
+  var da=+$("tkTglA").value,db=+$("tkTglB").value;
+  if(da<=CUT||db<=CUT){status("Tanggal sudah lewat, tidak bisa ditukar",true);return;}
+  var a=NAMA[+$("tkA").value],b=NAMA[+$("tkB").value];
+  if(tukarList.some(function(t){var ta=t.iA===undefined?t.i:t.iA,tb=t.iB===undefined?ta:t.iB;return ta===da&&tb===db&&((t.a===a&&t.b===b)||(t.a===b&&t.b===a));})){status("Tukar itu sudah ada");return;}
+  var current=hitung(idxOf(vy,vm+1,0)+32).res,ia=NAMA.indexOf(a),ib=NAMA.indexOf(b);
+  var it={iA:da,iB:db,a:a,b:b,sa:current[da][ia].c,sb:current[db][ib].c};tukarList.push(it);render();
+  store.simpanTukar(it,true).then(function(){status(sb?"Tukar tersimpan di Supabase":"Tukar tersimpan di browser");}).catch(function(){
+    tukarList=tukarList.filter(function(t){return t!==it;});render();status("Gagal menyimpan tukar, coba lagi",true);
+  });
+}
+$("tkGo").addEventListener("click",function(){
+  if(!previewTukar()){
+    status($("tkPrev").textContent || "Tukar belum memenuhi syarat.", true);
+    return;
+  }
+  var preview=$("tkPrev").textContent;
+  if(preview.indexOf("Peringatan:")>=0||preview.indexOf("Dampak:")>=0){
+    bukaKonfirmasiTukar(preview,simpanTukarTerpilih);
+    return;
+  }
+  simpanTukarTerpilih();
+});
+$("tkList").addEventListener("click",function(e){
+  var b=e.target.closest(".tkdel");if(!b)return;
+  var da=+b.dataset.ia,db=+b.dataset.ib,it=null;
+  tukarList.forEach(function(t){var ta=t.iA===undefined?t.i:t.iA,tb=t.iB===undefined?ta:t.iB;if(ta===da&&tb===db&&t.a===b.dataset.a&&t.b===b.dataset.b)it=t;});
+  if(!it)return;
+  tukarList=tukarList.filter(function(t){return t!==it;});render();
+  store.simpanTukar(it,false).then(function(){status("Tukar dibatalkan");}).catch(function(){tukarList.push(it);render();status("Gagal membatalkan tukar, coba lagi",true);});
+});
+
 /* ===== Penyimpanan izin =====
    Kalau config.js diisi (Supabase), data disimpan di database online.
    Kalau kosong, data disimpan di localStorage browser. */
 var CFG = window.JADWAL_CONFIG || {},
   sb = null,
-  LS = "jadwal-shift-izin-v1";
+  LS = "jadwal-shift-izin-v1",
+  LS2 = "jadwal-shift-tukar-v1";
 try {
   if (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase)
     sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
@@ -512,12 +906,10 @@ var store = {
     if (sb) {
       var row = kunciKeRow(k);
       var q = on
-        ? sb
-            .from("izin")
-            .upsert(row, {
-              onConflict: "tanggal,orang",
-              ignoreDuplicates: true,
-            })
+        ? sb.from("izin").upsert(row, {
+            onConflict: "tanggal,orang",
+            ignoreDuplicates: true,
+          })
         : sb
             .from("izin")
             .delete()
@@ -532,6 +924,24 @@ var store = {
     } catch (e) {}
     return Promise.resolve();
   },
+ muatTukar:function(){
+    if(sb)return sb.from("tukar").select("tanggal,tanggal_b,orang_a,orang_b,shift_a,shift_b").then(function(r){
+      if(r.error)return [];
+      return r.data.map(function(x){var a=x.tanggal.split("-"),b=(x.tanggal_b||x.tanggal).split("-");return {iA:idxOf(+a[0],+a[1]-1,+a[2]),iB:idxOf(+b[0],+b[1]-1,+b[2]),a:x.orang_a,b:x.orang_b,sa:x.shift_a,sb:x.shift_b};});
+    });
+    try{return Promise.resolve(JSON.parse(localStorage.getItem(LS2)||"[]"));}catch(e){return Promise.resolve([]);}
+  },
+  simpanTukar:function(it,on){
+    if(sb){
+      var da=tgl(it.iA===undefined?it.i:it.iA),db=tgl(it.iB===undefined?da:it.iB),ta=da.getFullYear()+"-"+pad2(da.getMonth()+1)+"-"+pad2(da.getDate()),tb=db.getFullYear()+"-"+pad2(db.getMonth()+1)+"-"+pad2(db.getDate());
+      var q=on?sb.from("tukar").upsert({tanggal:ta,tanggal_b:tb,orang_a:it.a,orang_b:it.b,shift_a:it.sa,shift_b:it.sb},{onConflict:"tanggal,orang_a,orang_b",ignoreDuplicates:true}):sb.from("tukar").delete().eq("tanggal",ta).eq("tanggal_b",tb).eq("orang_a",it.a).eq("orang_b",it.b);
+      return q.then(function(r){if(r.error)throw r.error;});
+    }
+    try {
+      localStorage.setItem(LS2, JSON.stringify(tukarList));
+    } catch (e) {}
+    return Promise.resolve();
+  },
   hapusSemua: function () {
     if (sb)
       return sb
@@ -540,18 +950,25 @@ var store = {
         .neq("orang", "")
         .then(function (r) {
           if (r.error) throw r.error;
+        })
+        .then(function () {
+          return sb.from("tukar").delete().neq("orang_a", "");
+        })
+        .then(function (r) {
+          if (r && r.error) throw r.error;
         });
     try {
       localStorage.removeItem(LS);
+      localStorage.removeItem(LS2);
     } catch (e) {}
     return Promise.resolve();
   },
 };
 function muatIzin() {
-  return store
-    .muat()
-    .then(function (o) {
-      izin = o;
+  return Promise.all([store.muat(), store.muatTukar()])
+    .then(function (r) {
+      izin = r[0];
+      tukarList = r[1];
       render();
       status(sb ? "Terhubung ke Supabase" : "Tersimpan di browser");
     })
@@ -567,8 +984,25 @@ if (sb) {
         { event: "*", schema: "public", table: "izin" },
         muatIzin,
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tukar" },
+        muatIzin,
+      )
       .subscribe();
   } catch (e) {}
 }
+function jadwalkanKunciOtomatis() {
+  var now = new Date(),
+    besok = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  setTimeout(
+    function () {
+      render();
+      jadwalkanKunciOtomatis();
+    },
+    besok - now + 100,
+  );
+}
 render();
+jadwalkanKunciOtomatis();
 muatIzin();
